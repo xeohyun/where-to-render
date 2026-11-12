@@ -1,0 +1,105 @@
+{
+ "_doc": "씬 레지스트리. view_sampler.py와 eval_protocol.py가 공통으로 읽는다. up_axis는 preset(+y 등) 또는 'x,y,z'. colmap_sparse/real_images는 Mip-NeRF 360처럼 실제 사진이 있는 씬만 — 알고리즘 입력이 아니라 평가셋(실사진 dev/test)과 진단(실제 카메라 분포 비교)에만 쓴다. up_source는 그 up 값의 출처. bg_color는 렌더 배경 기본값: Mip360은 black(3DGS 학습 배경과 같고 실사진 test와 비교), SuperSplat 씬은 white(고정 test가 white로 렌더됨) — 같은 씬의 학습셋과 test가 같은 배경을 쓰도록.",
+ "counter": {
+  "type": "mip360_indoor",
+  "ply": "out/mcmc/mcmc_models/counter_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "0.05802861,-0.85852381,-0.50947969",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/counter/sparse/0",
+  "real_images": "datasets/360_v2/counter/images",
+  "bg_color": "black"
+ },
+ "bonsai": {
+  "type": "mip360_indoor",
+  "ply": "out/mcmc/mcmc_models/bonsai_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "0.07526796,-0.76542502,-0.63910818",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/bonsai/sparse/0",
+  "real_images": "datasets/360_v2/bonsai/images",
+  "bg_color": "black"
+ },
+ "kitchen": {
+  "type": "mip360_indoor",
+  "ply": "out/mcmc/mcmc_models/kitchen_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "-0.06918547,-0.80552316,-0.58851152",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/kitchen/sparse/0",
+  "real_images": "datasets/360_v2/kitchen/images",
+  "bg_color": "black"
+ },
+ "room": {
+  "type": "mip360_indoor",
+  "ply": "out/mcmc/mcmc_models/room_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "0.04734037,-0.88566373,-0.46190762",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/room/sparse/0",
+  "real_images": "datasets/360_v2/room/images",
+  "note": "2026-09-09 재학습본(실사진 평가 0e/random/0d가 쓴 모델). out/mcmc/mcmc_models/room_mcmc(09-08 이전본)와 내용이 다름 — 2026-09-26~10-01 room 실험은 이전본을 썼음",
+  "bg_color": "black"
+ },
+ "stump": {
+  "type": "mip360_outdoor",
+  "ply": "out/mcmc/mcmc_models/stump_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "0.01596946,-0.69970451,-0.71425386",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/stump/sparse/0",
+  "real_images": "datasets/360_v2/stump/images",
+  "bg_color": "black"
+ },
+ "bicycle": {
+  "type": "mip360_outdoor",
+  "ply": "out/mcmc/mcmc_models/bicycle_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "-0.01622631,-0.97270556,-0.23147483",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT)",
+  "colmap_sparse": "datasets/360_v2/bicycle/sparse/0",
+  "real_images": "datasets/360_v2/bicycle/images",
+  "bg_color": "black"
+ },
+ "livingroom": {
+  "type": "supersplat_indoor",
+  "ply": "datasets/LivingRoom/scene.ply",
+  "sh_degree": 0,
+  "up_axis": "-y",
+  "up_source": "렌더 walkthrough로 확정(EXPERIMENT_LOG 2026-09-18)",
+  "bg_color": "white"
+ },
+ "garden": {
+  "type": "mip360_outdoor",
+  "ply": "out/mcmc/mcmc_models/garden_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "-0.00169421,-0.88234253,-0.4706047",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT, 다른 Mip360 씬과 같은 규칙)",
+  "colmap_sparse": "datasets/360_v2/garden/sparse/0",
+  "real_images": "datasets/360_v2/garden/images",
+  "bg_color": "black",
+  "note": "2026-10-11 held-out 씬: 최종 알고리즘 확정 후 처음 추가, 조정 없이 한 번 평가(sampling/mcmc/heldout_garden_20261011)"
+ },
+ "tnt_truck": {
+  "type": "tnt_outdoor",
+  "ply": "out/mcmc/mcmc_models/tnt_truck_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "0.10352371,-0.98362490,-0.14752933",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT, Mip360과 같은 규칙)",
+  "colmap_sparse": "datasets/tandt/truck/sparse/0",
+  "real_images": "datasets/tandt/truck/images",
+  "bg_color": "black",
+  "note": "2026-10-12 held-out 야외 씬(3DGS 공식 tandt_db). 최종 알고리즘 확정 후 처음 추가, 조정 없이 한 번 평가(sampling/mcmc/heldout_tnt_20261012). 이미지는 COLMAP 카메라의 절반 해상도라 초점을 축소해 씀"
+ },
+ "tnt_train": {
+  "type": "tnt_outdoor",
+  "ply": "out/mcmc/mcmc_models/tnt_train_mcmc/point_cloud/iteration_30000/point_cloud.ply",
+  "sh_degree": 3,
+  "up_axis": "-0.02817648,-0.99663413,0.07698373",
+  "up_source": "COLMAP 실제 카메라 평균 up(진단용 GT, Mip360과 같은 규칙)",
+  "colmap_sparse": "datasets/tandt/train/sparse/0",
+  "real_images": "datasets/tandt/train/images",
+  "bg_color": "black",
+  "note": "2026-10-12 held-out 야외 씬(3DGS 공식 tandt_db). 최종 알고리즘 확정 후 처음 추가, 조정 없이 한 번 평가(sampling/mcmc/heldout_tnt_20261012). 이미지는 COLMAP 카메라의 절반 해상도라 초점을 축소해 씀"
+ }
+}
