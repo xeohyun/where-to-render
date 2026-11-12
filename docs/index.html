@@ -119,7 +119,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
 
 <footer id="foot">
   오차는 테스트 이미지별 오차의 중앙값입니다. 요약 표는 seed 3개 평균이고, 개별 사진의 추정 결과는 seed 0 모델입니다.
-  위치 단위는 장면 좌표 단위로, ACE는 m로 표기합니다. Mip360은 COLMAP 좌표라 실제 미터와 다를 수 있으니 같은 씬 안에서 비교해 주세요.
+  위치 오차는 장면 좌표 단위입니다(Mip360은 COLMAP 좌표, 미터가 아님). 같은 씬 안에서만 비교해 주세요. 0.1·10° 이내는 위치 오차 0.1 단위·회전 오차 10° 이내인 테스트 사진의 비율입니다.
   커버리지는 시선 차이 45° 이내의 학습 뷰가 촬영 범위(테스트 카메라가 퍼진 범위)의 10% 거리 안에 있는 테스트 사진의 비율입니다.
   실제 테스트 카메라(정답)는 평가에만 썼고 알고리즘 입력에는 쓰지 않았습니다. 제안 방법은 장면의 위쪽 방향까지 지도만으로 추정하고(GT 미사용),
   비교한 random 두 종류는 실제 카메라에서 얻은 위쪽 방향을 그대로 써서 비교는 제안 방법에 불리한 조건입니다.
@@ -241,7 +241,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
     return n / st.meta.tests.length;
   }
   const pol = (k) => st.meta.policies.find(p => p.key === k);
-  const fmtT = (t) => t < 1 ? `${(t * 100).toFixed(t < 0.1 ? 1 : 0)} cm` : `${t.toFixed(t < 10 ? 2 : 1)} m`;
+  const fmtT = (t) => t < 10 ? t.toPrecision(2) : t.toFixed(0);  // 장면 좌표 단위(Mip360·SuperSplat 모두 미터 아님)
   const fmtR = (r) => `${r.toFixed(r < 10 ? 2 : 1)}°`;
   const ok = (e) => e.t < 0.1 && e.r < 10;
 
@@ -263,7 +263,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
         <td class="mono">${s ? s.acc.toFixed(0) + '%' : '–'}</td><td class="mono">${(cv * 100).toFixed(0)}%</td></tr>`;
     }).join('');
     const ua = st.meta.up_auto ? `<tr><td colspan="5" class="hint" style="text-align:left;white-space:normal">제안 방법은 장면의 위쪽 방향도 지도만으로 추정했습니다(COLMAP·실제 카메라 미사용). 이 씬의 추정 오차: <span class="mono">${st.meta.up_auto.err_deg.toFixed(1)}°</span></td></tr>` : '';
-    $('sumTable').innerHTML = `<thead><tr><th>${st.meta.label}</th><th>위치 오차</th><th>회전 오차</th><th>10cm·10° 성공</th><th>커버리지</th></tr></thead><tbody>${rows}${ua}</tbody>`;
+    $('sumTable').innerHTML = `<thead><tr><th>${st.meta.label}</th><th>위치 오차 (장면 단위)</th><th>회전 오차</th><th>0.1·10° 이내</th><th>커버리지</th></tr></thead><tbody>${rows}${ua}</tbody>`;
     $('legend').innerHTML = [
       ['ours', '--ours', '제안 방법 학습 카메라'], ['rand', st.rk === 'rand_up' ? '--rand' : '--rand2', pol(st.rk).label + ' 학습 카메라'],
       ['test', '--gt', '실제 테스트 카메라(정답)']
@@ -312,7 +312,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
         const e = t.est[p.key];
         cmp.appendChild(sideCard(p, d => {
           const k = ok(e) ? '--good' : '--bad';
-          d.insertAdjacentHTML('beforeend', `<span class="badge" style="--k:var(${k})">${ok(e) ? '성공' : '실패'} (10cm·10° 기준)</span>
+          d.insertAdjacentHTML('beforeend', `<span class="badge" style="--k:var(${k})">${ok(e) ? '성공' : '실패'} (0.1·10° 기준)</span>
             <div class="err">${fmtT(e.t)} <span style="color:var(--muted)">/</span> ${fmtR(e.r)}</div>
             <p class="hint">이 사진과 가장 가까운 학습 뷰 (거리 · 시선 차)</p>`);
           viewList(d, p, nearestViews(p, t.c, t.f, 3), W);
