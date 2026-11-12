@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="3DGS 지도만으로 고른 ACE 학습 시점을 무작위 선택과 비교하는 데모 (캡스톤디자인 Where to Render)">
+<meta property="og:title" content="Where to Render 데모">
+<meta property="og:description" content="3DGS 지도만으로 고른 학습 시점 vs 무작위 시점: 실제 사진 위치 추정 비교">
+<title>Where to Render 데모</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 상단 씬 선택·요약 → 왼쪽 3D 지도(고정) / 오른쪽 비교 패널. 좁은 화면에서는 한 열로 쌓는다. */
+:root {
+  --bg: #f3f4f1; --panel: #ffffff; --fg: #1d2421; --muted: #5d6762; --line: #d9ddd8;
+  --ours: #1f5fbf; --rand: #c27a12; --rand2: #8a6fa8; --gt: #1d2421; --good: #2a7a46; --bad: #b8432f;
+  --map: #e8eae6;
+  --f-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --panel: #1c211f; --fg: #e6ebe7; --muted: #9aa49e; --line: #2f3633;
+  --ours: #6fa2f0; --rand: #e6a54a; --rand2: #b9a1d6; --gt: #f1f4f2; --good: #5cbf7e; --bad: #ec7a63;
+  --map: #0e1110; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141816; --panel: #1c211f; --fg: #e6ebe7; --muted: #9aa49e; --line: #2f3633;
+  --ours: #6fa2f0; --rand: #e6a54a; --rand2: #b9a1d6; --gt: #f1f4f2; --good: #5cbf7e; --bad: #ec7a63;
+  --map: #0e1110; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 32px }
+h1 { font-size: 21px; font-weight: 600; margin: 0; text-wrap: balance }
+h2 { font-size: 15px; font-weight: 600; margin: 0 }
+.sub { color: var(--muted); margin: 2px 0 0; max-width: 72ch }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 14px }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel) }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--fg); padding: 6px 11px; cursor: pointer }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg) }
+.seg button:focus-visible, .chip:focus-visible, .tcell:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px }
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.mapwrap { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 8px); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--map) }
+@media (max-width: 900px) { .mapwrap { position: relative; top: 0 } #map { height: 52vh; min-height: 280px } }
+#map { width: 100%; height: min(70vh, 640px); min-height: 320px; display: block; cursor: crosshair; touch-action: none }
+.maptools { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap }
+.legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 3px; font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px }
+.legend label { display: flex; align-items: center; gap: 6px; cursor: pointer }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; pointer-events: none }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0 }
+table.sum { width: 100%; border-collapse: collapse; font-size: 13px }
+table.sum th, table.sum td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); white-space: nowrap }
+table.sum th:first-child, table.sum td:first-child { text-align: left; white-space: normal }
+table.sum th { font-weight: 500; color: var(--muted); font-size: 12px }
+.tablewrap { overflow-x: auto }
+.hint { color: var(--muted); font-size: 13px; margin: 0 }
+.cmp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px }
+@media (max-width: 460px) { .cmp { grid-template-columns: minmax(0, 1fr) } }
+.side { display: flex; flex-direction: column; gap: 8px; min-width: 0; border-top: 3px solid var(--c); padding-top: 8px }
+.side h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--c) }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); width: fit-content }
+.err { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 500 }
+.thumbs { display: flex; flex-wrap: wrap; gap: 6px }
+.thumb { border-radius: 4px; background-repeat: no-repeat; background-color: var(--map); flex: none }
+.tcap { font-size: 11px; color: var(--muted); font-family: var(--f-mono); margin-top: 2px }
+.query { display: flex; flex-direction: column; gap: 6px }
+.query .thumb { border-radius: 6px }
+.strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 210px; overflow-y: auto; padding: 2px }
+.tcell { position: relative; padding: 0; border: 2px solid transparent; border-radius: 6px; background: none; cursor: pointer; overflow: hidden }
+.tcell[aria-pressed="true"] { border-color: var(--fg) }
+.tcell .pip { position: absolute; right: 3px; top: 3px; display: flex; gap: 2px }
+.tcell .pip i { width: 7px; height: 7px; border-radius: 50%; display: block; border: 1px solid #fff }
+.count { font-family: var(--f-mono); font-size: 26px; font-weight: 500; line-height: 1.1 }
+footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>어디서 렌더할까: 제안 방법 vs Random</h1>
+    <p class="sub">3DGS 지도만으로 고른 ACE 학습 시점을 무작위 선택과 비교합니다. 사진을 고르거나 지도를 클릭해 보세요.</p>
+  </div>
+  <div class="seg" id="sceneSeg" role="group" aria-label="씬 선택"></div>
+</header>
+
+<div class="grid">
+  <div class="mapwrap">
+    <canvas id="map" aria-label="3D 지도"></canvas>
+    <div class="maptools">
+      <div class="seg" role="group" aria-label="보기 방향">
+        <button type="button" id="viewTop" aria-pressed="true">위에서 보기</button>
+        <button type="button" id="viewTilt" aria-pressed="false">비스듬히 보기</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="loading" id="loading">지도를 불러오는 중…</div>
+  </div>
+
+  <div class="panel">
+    <div class="tablewrap"><table class="sum" id="sumTable"></table></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
+      <div class="seg" role="group" aria-label="모드">
+        <button type="button" id="modePhoto" aria-pressed="true">테스트 사진으로 비교</button>
+        <button type="button" id="modeMap" aria-pressed="false">지도에서 위치 고르기</button>
+      </div>
+      <div class="seg" role="group" aria-label="비교할 random">
+        <button type="button" id="rUp" aria-pressed="true">Random: 같은 높이대·수평</button>
+        <button type="button" id="rFull" aria-pressed="false">Random: 완전 무작위</button>
+      </div>
+    </div>
+    <div id="body"></div>
+  </div>
+</div>
+
+<footer id="foot">
+  오차는 테스트 이미지별 오차의 중앙값입니다. 요약 표는 seed 3개 평균이고, 개별 사진의 추정 결과는 seed 0 모델입니다.
+  위치 단위는 장면 좌표 단위로, ACE는 m로 표기합니다. Mip360은 COLMAP 좌표라 실제 미터와 다를 수 있으니 같은 씬 안에서 비교해 주세요.
+  커버리지는 시선 차이 45° 이내의 학습 뷰가 촬영 범위(테스트 카메라가 퍼진 범위)의 10% 거리 안에 있는 테스트 사진의 비율입니다.
+  실제 테스트 카메라(정답)는 평가에만 썼고 알고리즘 입력에는 쓰지 않았습니다. 제안 방법은 장면의 위쪽 방향까지 지도만으로 추정하고(GT 미사용),
+  비교한 random 두 종류는 실제 카메라에서 얻은 위쪽 방향을 그대로 써서 비교는 제안 방법에 불리한 조건입니다.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const POLC = { ours: '--ours', rand_up: '--rand', rand_full: '--rand2' };
+  const st = { scenes: [], key: null, meta: null, mode: 'photo', rk: 'rand_up', ti: 0, pick: null };
+
+  // ---------- three.js ----------
+  const canvas = $('map');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+  cam.up.set(0, 0, 1);
+  const ctl = new THREE.OrbitControls(cam, canvas);
+  ctl.enableDamping = true; ctl.screenSpacePanning = true;
+  let world = new THREE.Group(), hl = new THREE.Group(); scene.add(world); scene.add(hl);
+  const layers = {};
+  let zPlane = 0, ext = 1, span = 1, center = new THREE.Vector3();
+
+  function size() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false); cam.aspect = w / Math.max(h, 1); cam.updateProjectionMatrix();
+  }
+  new ResizeObserver(size).observe(canvas);
+  (function loop() { ctl.update(); renderer.render(scene, cam); requestAnimationFrame(loop); })();
+  function theme() { scene.background = new THREE.Color(css('--map')); if (st.meta) { buildCams(); redraw(); } }
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme); } catch (e) {}
+  new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function col(v) { return new THREE.Color(css(v)); }
+  function camGlyphs(list, color, len, size) {
+    const seg = new Float32Array(list.length * 6), pts = new Float32Array(list.length * 3);
+    list.forEach((c, i) => {
+      seg.set([c[0], c[1], c[2], c[0] + c[3] * len, c[1] + c[4] * len, c[2] + c[5] * len], i * 6);
+      pts.set([c[0], c[1], c[2]], i * 3);
+    });
+    const g = new THREE.Group();
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(seg, 3));
+    g.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color })));
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    g.add(new THREE.Points(pg, new THREE.PointsMaterial({ color, size, sizeAttenuation: false })));
+    return g;
+  }
+  function buildCams() {
+    for (const k in layers) if (k !== 'points') { world.remove(layers[k]); delete layers[k]; }
+    const L = ext * 0.035;
+    st.meta.policies.forEach(p => { layers[p.key] = camGlyphs(p.cams, col(POLC[p.key]), L, 5); world.add(layers[p.key]); });
+    layers.test = camGlyphs(st.meta.tests.map(t => [...t.c, ...t.f]), col('--gt'), L * 1.3, 6); world.add(layers.test);
+    applyVis();
+  }
+  const vis = { ours: true, rand: true, test: true };
+  function applyVis() {
+    if (!st.meta) return;
+    layers.ours.visible = vis.ours;
+    layers.rand_up.visible = vis.rand && st.rk === 'rand_up';
+    layers.rand_full.visible = vis.rand && st.rk === 'rand_full';
+    layers.test.visible = vis.test;
+  }
+  function setView(top) {
+    const r = ext * 0.95;
+    ctl.target.copy(center);
+    if (top) cam.position.set(center.x, center.y - r * 0.02, center.z + r * 1.25);
+    else cam.position.set(center.x - r * 0.75, center.y - r * 0.75, center.z + r * 0.7);
+    cam.near = ext * 0.002; cam.far = ext * 20; cam.updateProjectionMatrix();
+    $('viewTop').setAttribute('aria-pressed', top); $('viewTilt').setAttribute('aria-pressed', !top);
+  }
+  $('viewTop').onclick = () => setView(true);
+  $('viewTilt').onclick = () => setView(false);
+
+  // ---------- 데이터 ----------
+  async function loadScene(key) {
+    st.key = key; st.pick = null; $('loading').hidden = false;
+    [...$('sceneSeg').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.k === key));
+    const [meta, buf] = await Promise.all([fetch(`${key}/meta.json`).then(r => r.json()), fetch(`${key}/points.json`).then(r => r.json()).then(j => { const s = atob(j.b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; })]);
+    st.meta = meta; ext = meta.extent;
+    // 비교 반경 기준: 실제 테스트 카메라가 퍼진 범위(p5~p95 대각선). 평가용으로만 쓴다.
+    const pct = (v, q) => { const a = [...v].sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.max(0, Math.round(q * (a.length - 1))))]; };
+    span = Math.hypot(...[0, 1, 2].map(a => pct(meta.tests.map(t => t.c[a]), 0.95) - pct(meta.tests.map(t => t.c[a]), 0.05))) || ext;
+    scene.remove(world); world = new THREE.Group(); scene.add(world);
+    for (const k in layers) delete layers[k];
+    const n = meta.n_points, q = new Uint16Array(buf, 0, n * 3), c8 = new Uint8Array(buf, n * 6, n * 3);
+    const [lo, hi] = meta.bbox, pos = new Float32Array(n * 3), cc = new Float32Array(n * 3);
+    for (let i = 0; i < n * 3; i++) { const a = i % 3; pos[i] = lo[a] + q[i] / 65535 * (hi[a] - lo[a]); cc[i] = c8[i] / 255; }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(cc, 3));
+    layers.points = new THREE.Points(g, new THREE.PointsMaterial({ size: 2, vertexColors: true, sizeAttenuation: false }));
+    world.add(layers.points);
+    const oc = meta.policies[0].cams;
+    const zs = oc.map(c => c[2]).sort((a, b) => a - b); zPlane = zs[Math.floor(zs.length / 2)];
+    center.set(...[0, 1].map(a => { const v = meta.tests.map(t => t.c[a]).concat(oc.map(c => c[a])).sort((x, y) => x - y); return v[Math.floor(v.length / 2)]; }), zPlane);
+    scene.background = col('--map');
+    buildCams(); setView($('viewTop').getAttribute('aria-pressed') === 'true');
+    // 처음 보여줄 사진: 제안 방법은 성공했고 random과 차이가 가장 큰 사진
+    let best = 0, bv = -1e9;
+    meta.tests.forEach((t, i) => { const e = t.est; if (!e) return; const v = (e.ours.t < 0.1 ? 1e3 : 0) + Math.min(e.rand_up.t, 50) - e.ours.t; if (v > bv) { bv = v; best = i; } });
+    st.ti = best; $('loading').hidden = true;
+    renderSummary(); redraw();
+  }
+
+  // ---------- 계산 ----------
+  const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const d2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+  function nearestViews(p, c, f, k) {
+    return p.cams.map((x, i) => ({ i, d: d3(x, c), a: ang(x.slice(3, 6), f) })).filter(o => o.a < 45).sort((a, b) => a.d - b.d).slice(0, k);
+  }
+  function coverage(p) {
+    const thr = 0.1 * span; let n = 0;
+    st.meta.tests.forEach(t => { if (p.cams.some(x => d3(x, t.c) < thr && ang(x.slice(3, 6), t.f) < 45)) n++; });
+    return n / st.meta.tests.length;
+  }
+  const pol = (k) => st.meta.policies.find(p => p.key === k);
+  const fmtT = (t) => t < 1 ? `${(t * 100).toFixed(t < 0.1 ? 1 : 0)} cm` : `${t.toFixed(t < 10 ? 2 : 1)} m`;
+  const fmtR = (r) => `${r.toFixed(r < 10 ? 2 : 1)}°`;
+  const ok = (e) => e.t < 0.1 && e.r < 10;
+
+  // ---------- 화면 ----------
+  function thumb(sp, i, w, dir) {
+    const el = document.createElement('div'); el.className = 'thumb';
+    const s = w / sp.tile_w;
+    el.style.width = `${w}px`; el.style.height = `${Math.round(sp.tile_h * s)}px`;
+    el.style.backgroundImage = `url(${dir}/${sp.file})`;
+    el.style.backgroundSize = `${sp.cols * sp.tile_w * s}px auto`;
+    el.style.backgroundPosition = `-${(i % sp.cols) * sp.tile_w * s}px -${Math.floor(i / sp.cols) * sp.tile_h * s}px`;
+    return el;
+  }
+  function renderSummary() {
+    const rows = st.meta.policies.map(p => {
+      const s = p.summary, cv = coverage(p);
+      return `<tr><td><span class="dot" style="background:var(${POLC[p.key]})"></span> ${p.label}</td>
+        <td class="mono">${s ? fmtT(s.t) : '–'}</td><td class="mono">${s ? fmtR(s.r) : '–'}</td>
+        <td class="mono">${s ? s.acc.toFixed(0) + '%' : '–'}</td><td class="mono">${(cv * 100).toFixed(0)}%</td></tr>`;
+    }).join('');
+    const ua = st.meta.up_auto ? `<tr><td colspan="5" class="hint" style="text-align:left;white-space:normal">제안 방법은 장면의 위쪽 방향도 지도만으로 추정했습니다(COLMAP·실제 카메라 미사용). 이 씬의 추정 오차: <span class="mono">${st.meta.up_auto.err_deg.toFixed(1)}°</span></td></tr>` : '';
+    $('sumTable').innerHTML = `<thead><tr><th>${st.meta.label}</th><th>위치 오차</th><th>회전 오차</th><th>10cm·10° 성공</th><th>커버리지</th></tr></thead><tbody>${rows}${ua}</tbody>`;
+    $('legend').innerHTML = [
+      ['ours', '--ours', '제안 방법 학습 카메라'], ['rand', st.rk === 'rand_up' ? '--rand' : '--rand2', pol(st.rk).label + ' 학습 카메라'],
+      ['test', '--gt', '실제 테스트 카메라(정답)']
+    ].map(([k, c, t]) => `<label><input type="checkbox" data-k="${k}" ${vis[k] ? 'checked' : ''}><span class="dot" style="background:var(${c})"></span>${t}</label>`).join('');
+    $('legend').querySelectorAll('input').forEach(i => i.onchange = () => { vis[i.dataset.k] = i.checked; applyVis(); });
+  }
+  function marker(p, color, r) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshBasicMaterial({ color }));
+    m.position.set(...p); hl.add(m);
+  }
+  function line(a, b, color) {
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
+    hl.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color })));
+  }
+  function clearHl() { scene.remove(hl); hl = new THREE.Group(); scene.add(hl); }
+
+  function sideCard(p, inner) {
+    const d = document.createElement('div'); d.className = 'side'; d.style.setProperty('--c', `var(${POLC[p.key]})`);
+    d.innerHTML = `<h3>${p.label}</h3>`; inner(d); return d;
+  }
+  function viewList(d, p, items, w) {
+    const box = document.createElement('div'); box.className = 'thumbs';
+    items.forEach(o => {
+      const c = document.createElement('div'); c.appendChild(thumb(p.sprite, o.i, w, st.key));
+      const cap = document.createElement('div'); cap.className = 'tcap'; cap.textContent = `${fmtT(o.d)} · ${o.a.toFixed(0)}°`; c.appendChild(cap);
+      box.appendChild(c);
+    });
+    if (!items.length) { const h = document.createElement('p'); h.className = 'hint'; h.textContent = '45° 안에서 비슷한 방향을 보는 학습 뷰가 없습니다.'; box.appendChild(h); }
+    d.appendChild(box);
+  }
+
+  function redraw() {
+    clearHl(); applyVis();
+    const body = $('body'); body.innerHTML = '';
+    const P = [pol('ours'), pol(st.rk)], W = Math.max(70, Math.min(118, Math.floor((body.clientWidth - 40) / 4)));
+    if (st.mode === 'photo') {
+      const t = st.meta.tests[st.ti], r = ext * 0.012;
+      const q = document.createElement('div'); q.className = 'query';
+      q.appendChild(thumb(st.meta.test_sprite, st.ti, Math.min(400, body.clientWidth), st.key));
+      const cap = document.createElement('p'); cap.className = 'hint';
+      cap.textContent = `실제 테스트 사진 ${st.ti + 1}/${st.meta.tests.length} (지도 학습에 쓰지 않은 사진). 두 모델이 이 사진의 카메라 위치를 추정한 결과입니다.`;
+      q.appendChild(cap); body.appendChild(q);
+      marker(t.c, col('--gt'), r * 1.2);
+      const cmp = document.createElement('div'); cmp.className = 'cmp';
+      P.forEach(p => {
+        const e = t.est[p.key];
+        cmp.appendChild(sideCard(p, d => {
+          const k = ok(e) ? '--good' : '--bad';
+          d.insertAdjacentHTML('beforeend', `<span class="badge" style="--k:var(${k})">${ok(e) ? '성공' : '실패'} (10cm·10° 기준)</span>
+            <div class="err">${fmtT(e.t)} <span style="color:var(--muted)">/</span> ${fmtR(e.r)}</div>
+            <p class="hint">이 사진과 가장 가까운 학습 뷰 (거리 · 시선 차)</p>`);
+          viewList(d, p, nearestViews(p, t.c, t.f, 3), W);
+        }));
+        marker(e.c, col(POLC[p.key]), r); line(t.c, e.c, col(POLC[p.key]));
+        nearestViews(p, t.c, t.f, 3).forEach(o => line(t.c, p.cams[o.i].slice(0, 3), col(POLC[p.key])));
+      });
+      body.appendChild(cmp);
+      const h = document.createElement('p'); h.className = 'hint';
+      h.innerHTML = '다른 테스트 사진 고르기 (점: <span style="color:var(--ours)">제안 방법</span> / <span style="color:var(--rand)">Random</span> 성공=초록, 실패=빨강)';
+      body.appendChild(h);
+      const strip = document.createElement('div'); strip.className = 'strip';
+      st.meta.tests.forEach((tt, i) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'tcell'; b.setAttribute('aria-pressed', i === st.ti);
+        b.setAttribute('aria-label', `테스트 사진 ${i + 1}`);
+        b.appendChild(thumb(st.meta.test_sprite, i, 72, st.key));
+        const pip = document.createElement('span'); pip.className = 'pip';
+        P.forEach(p => { const x = document.createElement('i'); x.style.background = `var(${ok(tt.est[p.key]) ? '--good' : '--bad'})`; pip.appendChild(x); });
+        b.appendChild(pip); b.onclick = () => { st.ti = i; redraw(); };
+        strip.appendChild(b);
+      });
+      body.appendChild(strip);
+    } else {
+      if (!st.pick) {
+        body.insertAdjacentHTML('beforeend', `<p class="hint">지도에서 아무 곳이나 클릭하세요(끌면 회전·이동). 그 위치 주변에 두 방법이 학습 뷰를 몇 장 두었는지, 가장 가까운 학습 뷰가 무엇인지 보여 줍니다.</p>`);
+        return;
+      }
+      const R = 0.1 * span, pk = st.pick;
+      marker(pk, col('--gt'), ext * 0.012);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(R * 0.98, R, 64), new THREE.MeshBasicMaterial({ color: col('--gt'), side: THREE.DoubleSide }));
+      ring.position.set(pk[0], pk[1], pk[2]); hl.add(ring);
+      body.insertAdjacentHTML('beforeend', `<p class="hint">클릭한 위치에서 수평 거리 ${fmtT(R)}(촬영 범위의 10%) 안의 학습 뷰 수와, 가장 가까운 학습 뷰 4장입니다.</p>`);
+      const cmp = document.createElement('div'); cmp.className = 'cmp';
+      P.forEach(p => {
+        const near = p.cams.map((x, i) => ({ i, d: d2(x, pk), a: 0, x })).sort((a, b) => a.d - b.d);
+        const inR = near.filter(o => o.d < R).length;
+        cmp.appendChild(sideCard(p, d => {
+          d.insertAdjacentHTML('beforeend', `<div><span class="count">${inR}</span> <span class="hint">장 / 전체 ${p.cams.length}장</span></div>`);
+          const box = document.createElement('div'); box.className = 'thumbs';
+          near.slice(0, 4).forEach(o => {
+            const c = document.createElement('div'); c.appendChild(thumb(p.sprite, o.i, W, st.key));
+            const pitch = Math.asin(Math.max(-1, Math.min(1, o.x[5]))) * 180 / Math.PI;
+            const cap = document.createElement('div'); cap.className = 'tcap'; cap.textContent = `${fmtT(o.d)} · pitch ${pitch.toFixed(0)}°`;
+            c.appendChild(cap); box.appendChild(c);
+            line(pk, o.x.slice(0, 3), col(POLC[p.key]));
+          });
+          d.appendChild(box);
+        }));
+      });
+      body.appendChild(cmp);
+    }
+  }
+
+  // ---------- 입력 ----------
+  let down = null;
+  canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5 || !st.meta) return;
+    const rc = canvas.getBoundingClientRect();
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((e.clientX - rc.left) / rc.width * 2 - 1, -(e.clientY - rc.top) / rc.height * 2 + 1), cam);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -zPlane), hit)) return;
+    st.pick = [hit.x, hit.y, zPlane]; setMode('map');
+  });
+  function setMode(m) {
+    st.mode = m; $('modePhoto').setAttribute('aria-pressed', m === 'photo'); $('modeMap').setAttribute('aria-pressed', m === 'map'); redraw();
+  }
+  $('modePhoto').onclick = () => setMode('photo');
+  $('modeMap').onclick = () => setMode('map');
+  function setRand(k) {
+    st.rk = k; $('rUp').setAttribute('aria-pressed', k === 'rand_up'); $('rFull').setAttribute('aria-pressed', k === 'rand_full');
+    renderSummary(); redraw();
+  }
+  $('rUp').onclick = () => setRand('rand_up');
+  $('rFull').onclick = () => setRand('rand_full');
+  window.addEventListener('resize', () => { if (st.meta) redraw(); });
+
+  fetch('scenes.json').then(r => r.json()).then(list => {
+    st.scenes = list;
+    list.forEach(s => {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.k = s.key; b.textContent = s.label.split(' (')[0];
+      b.title = s.label; b.onclick = () => loadScene(s.key); $('sceneSeg').appendChild(b);
+    });
+    let h = ''; try { h = location.hash.slice(1); } catch (e) {}
+    loadScene(list.some(s => s.key === h) ? h : list[0].key);
+  }).catch(() => { $('loading').textContent = '데이터를 불러오지 못했습니다. 페이지를 새로고침해 주세요.'; });
+})();
+</script>
+</body>
+</html>
