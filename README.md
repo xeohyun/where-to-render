@@ -4,7 +4,7 @@
 실제 사진, 정답 포즈, COLMAP 결과를 쓰지 않고(GT-free) 학습 영상과 포즈를 렌더링해 만들고,
 그 영상으로 학습한 ACE가 **실제 사진**의 6-DoF 포즈를 추정한다.
 
-- 웹 데모 : https://xeohyun.github.io/where-to-render/
+- 웹 데모 : [https://xeohyun.github.io/where-to-render/](https://xeohyun.github.io/where-to-render/)
 
 ## 방법
 
