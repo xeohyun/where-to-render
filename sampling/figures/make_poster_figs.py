@@ -155,7 +155,7 @@ def fig_check():
         elif r["void_frac"] > 0.05:
             title, value = "Reject: void", f"void pixels {100 * r['void_frac']:.0f}% (pass if ≤ 5%)"
         else:
-            title, value = "Reject: blurry", f"depth spread {r['relstd']:.2f} (pass if ≤ 0.30)"
+            title, value = "Reject: depth spread", f"depth spread {r['relstd']:.2f} (pass if ≤ 0.30)"
         im = Image.open(ROOT / s["path"]).convert("RGB")
         ax.imshow(im); ax.set_xticks([]); ax.set_yticks([])
         ok = s["keep"]
@@ -236,34 +236,45 @@ def fig_thumbs(scene="counter"):
     g.save(OUT / "poster_thumbs.png")
 
 
+AB_ROWS = [("f3ab_noaim", "w/o height range & aimed pitch"), ("f3ab_nofb", "w/o pitch fallback"),
+           ("f3ab_vpp0", "2 views/position → all passing"), ("f3ab_area", "density → area weighting"),
+           ("f3ab_norelstd", "w/o depth-spread check")]
+AB_SCENES = ["counter", "room", "livingroom", "bicycle", "stump"]
+
+
 def fig_ablation():
-    """구성 요소 하나를 뺐을 때 위치 오차 배율(가장 크게 나빠진 장면). 값은 이전 버전(6층 고정, GT up), seed 2–3개."""
-    rows = [("w/o height range & aimed pitch", "counter", 54.5), ("w/o pitch fallback", "stump", 21.1),
-            ("2 views/position → all passing", "room", 10.8), ("density → area weighting", "bicycle", 7.0),
-            ("w/o depth-spread check", "bicycle", 3.4)]
-    fig, ax = plt.subplots(figsize=(10, 5.4))
-    y = np.arange(len(rows))[::-1]
-    ax.barh(y, [r[2] for r in rows], color=RED, height=0.62)
-    ax.set_xscale("log"); ax.set_xlim(1, 8000)
-    ax.set_yticks(y); ax.set_yticklabels([r[0] for r in rows], fontsize=24)
-    for yy, r in zip(y, rows):
-        ax.text(r[2] * 1.12, yy, f"×{r[2]:g} ({r[1]})", va="center", fontsize=23, fontweight="bold", color=RED)
-    ax.axvline(1, color="#333", lw=1)
-    ax.set_xticks([1, 10, 100]); ax.set_xticklabels(["×1", "×10", "×100"], fontsize=20)
-    ax.tick_params(axis="y", length=0)
+    """최종 설정(final3)에서 구성 요소 하나만 바꿨을 때의 위치 오차 배율(바꾼 설정 / final3, 3 seeds 평균), 5개 장면 모두 표시.
+    값: sampling/mcmc/final3_ablation_20261112 (results.json 키 <scene>|f3ab_*|s<k>|test). 2026-11-12 이전 그림(장면별 최댓값, 이전 설정)은 교체."""
+    from matplotlib.colors import LogNorm
+    M_ = np.array([[mean(sc, c) / mean(sc, "final3") for sc in AB_SCENES] for c, _ in AB_ROWS])
+    fig, ax = plt.subplots(figsize=(10.5, 5.6))
+    im = ax.imshow(M_, cmap="RdBu_r", norm=LogNorm(vmin=1 / 30, vmax=30), aspect="auto")
+    for i in range(M_.shape[0]):
+        for j in range(M_.shape[1]):
+            v = M_[i, j]
+            ax.text(j, i, f"×{v:.1f}" if v < 10 else f"×{v:.0f}", ha="center", va="center", fontsize=20,
+                    color="white" if (v > 6 or v < 1 / 6) else "#1a1a1a", fontweight="bold")
+    lab = dict(livingroom="Living\nRoom")
+    ax.set_xticks(range(len(AB_SCENES))); ax.set_xticklabels([lab.get(x, x) for x in AB_SCENES], fontsize=19)
+    ax.set_yticks(range(len(AB_ROWS))); ax.set_yticklabels([r[1] for r in AB_ROWS], fontsize=19)
+    ax.tick_params(length=0); ax.xaxis.tick_top()
+    for sp in ax.spines.values():
+        sp.set_visible(False)
     fig.tight_layout()
     fig.savefig(OUT / "poster_ablation.png", dpi=220)
     plt.close(fig)
+    (OUT / "f3_ablation_ratios.json").write_text(json.dumps(
+        {c: {sc: float(M_[i, j]) for j, sc in enumerate(AB_SCENES)} for i, (c, _) in enumerate(AB_ROWS)}, indent=1))
 
 
 def fig_up():
-    """위쪽 방향 자동 추정 오차. 값: sampling/up_estimation (발표 fig_up과 같은 데이터)."""
-    a = json.loads((ROOT / "sampling/up_estimation/results_up_auto_final.json").read_text())["scenes"]
-    h = json.loads((ROOT / "sampling/up_estimation/results_heldout.json").read_text())
+    """위쪽 방향 자동 추정 오차. 값: sampling/up_estimation_20261024 (발표 fig_up과 같은 데이터)."""
+    a = json.loads((ROOT / "sampling/up_estimation_20261024/results_up_auto_final.json").read_text())["scenes"]
+    h = json.loads((ROOT / "sampling/up_estimation_20261024/results_heldout.json").read_text())
     va, vh = [r["err_deg"] for r in a.values()], [r["err_deg"] for r in h.values()]
     fig, ax = plt.subplots(figsize=(8, 4.4))
     ax.bar(range(len(va)), va, color=OURS, width=0.75, label=f"Development scenes ({len(va)})")
-    ax.bar(range(len(va) + 1, len(va) + 1 + len(vh)), vh, color="#8fb3ea", width=0.75, label=f"Held-out maps ({len(vh)})")
+    ax.bar(range(len(va) + 1, len(va) + 1 + len(vh)), vh, color="#8fb3ea", width=0.75, label=f"Other 3DGS maps ({len(vh)}; 1 new scene)")
     med = S.median(va + vh)
     ax.axhline(med, color=RED, ls="--", lw=2)
     ax.text(len(va) + len(vh) + 0.6, 7.3, f"- - overall median {med:.1f}°", color=RED, fontsize=18, fontweight="bold", ha="right")
@@ -276,12 +287,15 @@ def fig_up():
 
 
 def fig_nscale():
-    """학습 이미지 수를 0.5–4배로 바꿨을 때 위치 오차 (이전 버전 aimDrf_v11 설정, seed 3개 평균). 실선 = 제안, 점선 = 무작위(같은 높이대)."""
+    """학습 이미지 수를 0.5–4배로 바꿨을 때 위치 오차 (최종 설정 final3, 3 seeds 평균). 실선 = 제안, 점선 = 무작위(같은 높이대).
+    값: final3@x0.5/x2/x4는 sampling/mcmc/final3_ablation_20261112, 1×와 random_upright@x*는 기존 결과."""
     xs = [0.5, 1, 2, 4]
     fig, ax = plt.subplots(figsize=(8, 5.4))
+    out = {}
     for s, col in zip(["counter", "room", "bicycle"], ["#1f5fbf", "#2e9e5b", "#7a3fb0"]):
-        ours = [mean(s, "aimDrf_v11@x0.5"), mean(s, "aimDrf_rs"), mean(s, "aimDrf_v11@x2"), mean(s, "aimDrf_v11@x4")]
+        ours = [mean(s, "final3@x0.5"), mean(s, "final3"), mean(s, "final3@x2"), mean(s, "final3@x4")]
         rnd = [mean(s, "random_upright@x0.5"), mean(s, "random_upright"), mean(s, "random_upright@x2"), mean(s, "random_upright@x4")]
+        out[s] = dict(ours=ours, random_upright=rnd)
         ax.plot(xs, ours, "o-", color=col, lw=3.5, ms=10)
         ax.plot(xs, rnd, "s--", color=col, lw=2, ms=7, alpha=0.45)
         ax.text(4.35, rnd[-1], s, color=col, fontsize=20, fontweight="bold", va="center")
@@ -295,6 +309,8 @@ def fig_nscale():
     fig.tight_layout()
     fig.savefig(OUT / "poster_nscale.png", dpi=220)
     plt.close(fig)
+    (OUT / "f3_nscale.json").write_text(json.dumps(out, indent=1))
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

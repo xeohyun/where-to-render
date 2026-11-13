@@ -22,3 +22,13 @@ done
 for cfg in final3 random_upright random_full random_pillar; do
     python3 -u "$R" --tag "paper_$cfg" --configs "$cfg" --scenes "$SCENES" --seeds 0,1,2 --evals test --gpu "$GPU" --fixed_gpu
 done
+
+# 3) Ablation(최종 설정에서 요소 하나만 바꿈)과 학습 영상 수 0.5x-4x. RUN_ABLATION=1 일 때만.
+if [ "${RUN_ABLATION:-0}" = 1 ]; then
+    python3 -u "$R" --tag paper_f3ab --configs f3ab_noaim,f3ab_nofb,f3ab_vpp0,f3ab_area,f3ab_norelstd \
+        --scenes counter,room,livingroom,bicycle,stump --seeds 0,1,2 --evals test --gpu "$GPU" --fixed_gpu
+    for k in 0.5 2 4; do
+        python3 -u "$R" --tag "paper_ns_x$k" --configs final3,random_upright --scenes counter,room,bicycle \
+            --seeds 0,1,2 --evals test --gpu "$GPU" --fixed_gpu --n_scale "$k"
+    done
+fi
