@@ -121,7 +121,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
   오차는 테스트 이미지별 오차의 중앙값입니다. 요약 표는 seed 3개 평균이고, 개별 사진의 추정 결과는 seed 0 모델입니다.
   위치 오차는 장면 좌표 단위입니다(Mip360은 COLMAP 좌표, 미터가 아님). 같은 씬 안에서만 비교해 주세요. 0.1·10° 이내는 위치 오차 0.1 단위·회전 오차 10° 이내인 테스트 사진의 비율입니다.
   커버리지는 시선 차이 45° 이내의 학습 뷰가 촬영 범위(테스트 카메라가 퍼진 범위)의 10% 거리 안에 있는 테스트 사진의 비율입니다.
-  실제 테스트 카메라(정답)는 평가에만 썼고 알고리즘 입력에는 쓰지 않았습니다. 제안 방법은 장면의 위쪽 방향까지 지도만으로 추정하고(GT 미사용),
+  실제 테스트 카메라는 평가에만 썼고 알고리즘 입력에는 쓰지 않았습니다. 제안 방법은 장면의 위쪽 방향까지 지도만으로 추정하고(GT 미사용),
   비교한 random 두 종류는 실제 카메라에서 얻은 위쪽 방향을 그대로 써서 비교는 제안 방법에 불리한 조건입니다.
 </footer>
 
@@ -266,7 +266,7 @@ footer { margin-top: 18px; color: var(--muted); font-size: 12px; max-width: 90ch
     $('sumTable').innerHTML = `<thead><tr><th>${st.meta.label}</th><th>위치 오차 (장면 단위)</th><th>회전 오차</th><th>0.1·10° 이내</th><th>커버리지</th></tr></thead><tbody>${rows}${ua}</tbody>`;
     $('legend').innerHTML = [
       ['ours', '--ours', '제안 방법 학습 카메라'], ['rand', st.rk === 'rand_up' ? '--rand' : '--rand2', pol(st.rk).label + ' 학습 카메라'],
-      ['test', '--gt', '실제 테스트 카메라(정답)']
+      ['test', '--gt', '실제 테스트 카메라']
     ].map(([k, c, t]) => `<label><input type="checkbox" data-k="${k}" ${vis[k] ? 'checked' : ''}><span class="dot" style="background:var(${c})"></span>${t}</label>`).join('');
     $('legend').querySelectorAll('input').forEach(i => i.onchange = () => { vis[i.dataset.k] = i.checked; applyVis(); });
   }
